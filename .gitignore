@@ -2,3 +2,4 @@ docker-compose.yml
 compose-dev.yaml
 Dockerfile
 dockerignore
+.env
