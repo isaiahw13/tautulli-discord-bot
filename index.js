@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 require("dotenv").config();
+const refrehData = require('./refresh-data');
 const path = require("node:path");
 const { Client, Collection, Events, GatewayIntentBits } = require("discord.js");
 const token = process.env.BOT_TOKEN;
@@ -59,6 +60,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-
+//Refresh user data every 1 minute
+setInterval(refrehData, 60000);
 
 client.login(token);
+refrehData();
