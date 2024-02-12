@@ -5,6 +5,11 @@ const tautulliApiKey = process.env.TAUTULLI_API_KEY;
 const tautulliUrl = process.env.TAUTULLI_URL;
 const loadUsers = require("../../load-users.js").loadUsers;
 
+const redis = require("redis");
+const redisClient = redis.createClient();
+redisClient.connect().catch(console.error);
+const DEFAULT_EXPIRATION = 300; //five min data expiration period
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("top-ranking")
@@ -19,7 +24,7 @@ module.exports = {
         sortedUserList[i].total_time_hours
       } h ${sortedUserList[i].total_time_minutes} m\n`;
     }
-    await interaction.reply(reply);//reply to user
+    await interaction.reply(reply); //reply to user
   },
 };
 
@@ -31,17 +36,40 @@ async function getAllUsersWatchTimeStats() {
   for (i in userList) {
     const user = userList[i];
     try {
-      //query tautulli api for user watch time
-      const response = await axios.get(
-        tautulliUrl +
-          "/api/v2?apikey=" +
-          tautulliApiKey +
-          "&cmd=get_user_watch_time_stats",
-        {
-          params: { user_id: user.user_id, query_days: 0 },
+      //check if data has already been cached
+      const cachedData = await redisClient.get(
+        "user_watch_time_stats" + user.user_id,
+        (error, data) => {
+          if (error) console.error(error);
+          if (data != null) return res.json(JSON.parse(data));
         }
       );
-      let watchSeconds = response.data.response.data[0].total_time;
+
+      let response;
+      //assign cached data if available
+      if (cachedData !== null) response = JSON.parse(cachedData);
+      else {
+        //query tautulli api for user watch time
+        response = await axios.get(
+          tautulliUrl +
+            "/api/v2?apikey=" +
+            tautulliApiKey +
+            "&cmd=get_user_watch_time_stats",
+          {
+            params: { user_id: user.user_id, query_days: 0 },
+          }
+        );
+        response = response.data.response.data;
+
+        //cache response
+        redisClient.setEx(
+          "user_watch_time_stats" + user.user_id,
+          DEFAULT_EXPIRATION,
+          JSON.stringify(response)
+        );
+      }
+      //populate user list array
+      let watchSeconds = response[0].total_time;
       userListWithWatchTime.push({
         user_name: user.friendly_name,
         user_id: user.user_id,
